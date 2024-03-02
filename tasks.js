@@ -35,6 +35,7 @@ class Collections {
 		} else {
 			console.err('Error: Task was not type "Branch" nor "Leaf".');
 		}
+
 		task_id = datum.task_id;
 		this.tasks[task_id] = task;
 	}
@@ -54,7 +55,7 @@ class Collections {
 		this.populate_children();
 
 		for(const branch_id in this.branches) {
-			this.branches[branch_id].calculate_total();
+			this.branches[branch_id].calculate_total(this);
 		}
 	}
 
@@ -63,9 +64,17 @@ class Collections {
 			let task = this.tasks[task_id];
 
 			if(task.parent_id) {
-				this.branches[task.parent_id].children.push(task_id);
+				this.branches[task.parent_id].child_ids.push(task_id);
 			}
 		}
+	}
+
+	to_json() {
+		let table = []
+
+		this.tasks.forEach((task_id) => {
+			table.push(this.tasks[task_id].to_json())
+		})
 	}
 }
 
@@ -91,19 +100,60 @@ class Task {
 			cost_code_aggregated = `${parent.cost_code}.${cost_code_aggregated}`
 			return this.recurse_cost_codes(collections, cost_code_aggregated, parent)
 		}
-		let pause;
 		return cost_code_aggregated;
 	}
 
-	calculate_total(collections) {}
+	to_json() {
+		// Create and return an object populated with the appropriate properties. 
+	}
 }
 
 class Branch extends Task {
 	constructor(datum, cost_code) {
 		super(datum, cost_code);
 		this.branch_id = datum.idtasks_branches;
-		this.total = 0;
-		this.children = [];
+		this.total = 0; // `0` or `null`?
+		this.child_ids = [];
+	}
+
+	calculate_total(collection) {
+		this.total = this.recurse_total(collection, this.total, this);
+	}
+
+	recurse_total(collection, total, branch) {
+		return branch.child_ids.map((child_id) => {
+			let child = collection.tasks[child_id];
+			let child_klass = child.constructor.name;
+			
+			return total += child.net;
+		})
+
+		// return branch.child_ids.map((child_id) => {
+		// 	let child = collection.tasks[child_id];
+		// 	let child_klass = child.constructor.name;
+			
+		// 	if(child_klass = 'Leaf') {
+		// 		return total += child.net;
+		// 	}
+		// })
+
+		// if(branch.children) {
+		// 	for (const child_id in branch.children) {
+		// 		let child = collection.tasks[branch.children[child_id]];
+		// 		let child_klass = child.constructor.name;
+
+		// 		switch(child_klass) {
+		// 			case 'Branch':
+		// 				return this.recurse_total(collection, total, child)
+		// 				break;
+		// 			case 'Leaf':
+		// 				return total += child.net;
+		// 				break;
+		// 			default:
+		// 				console.err('Error: Child class was neither `Branch` nor `Leaf`.')
+		// 		}
+		// 	}
+		// }
 	}
 }
 
