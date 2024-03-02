@@ -70,11 +70,13 @@ class Collections {
 	}
 
 	to_json() {
-		let table = []
+		let table = [];
 
-		this.tasks.forEach((task_id) => {
-			table.push(this.tasks[task_id].to_json())
-		})
+		for(const task_id in this.tasks) {
+			table.push(this.tasks[task_id].to_json());
+		}
+
+		return table;
 	}
 }
 
@@ -105,6 +107,21 @@ class Task {
 
 	to_json() {
 		// Create and return an object populated with the appropriate properties. 
+		let json = {};
+
+		json['cost_code_aggregated'] = this.cost_code_aggregated;
+		json['name'] = this.name;
+		json['description'] = this.description;
+		json['total'] = this.total;
+		json['quantity'] = this.quantity;
+		json['cost'] = this.cost;
+		json['tax'] = this.tax;
+		json['markup'] = this.markup;
+		json['net'] = this.net;
+		json['stages'] = this.stages;
+		json['category'] = this.category;
+
+		return json;
 	}
 }
 
@@ -153,13 +170,19 @@ class Leaf extends Task {
 }
 
 export const handler = async (data) => {
+	let json;
 	const collections = new Collections();
 
 	collections.import(data);
 	collections.calculate_cost_codes();
 	collections.calculate_totals();
+	
+	json = collections.to_json();
+	json.sort((a, b) => {
+		return a.cost_code_aggregated.localeCompare(b.cost_code_aggregated);
+	})
 
-	let pause;
+	return json;
 }
 
 async function json() {
