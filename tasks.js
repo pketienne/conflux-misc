@@ -117,7 +117,7 @@ class Branch extends Task {
 	}
 
 	calculate_total(collection) {
-		this.total = this.recurse_total(collection, this.total, this); // change back to `total` from `total_z` when done testing.
+		this.total = this.recurse_total(collection, this.total, this);
 	}
 
 	recurse_total(collection, total, branch) {
