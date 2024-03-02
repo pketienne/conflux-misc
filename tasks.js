@@ -49,6 +49,24 @@ class Collections {
 			this.tasks[task_id].calculate_cost_code(this);
 		}
 	}
+
+	calculate_totals() {
+		this.populate_children();
+
+		for(const branch_id in this.branches) {
+			this.branches[branch_id].calculate_total();
+		}
+	}
+
+	populate_children() {
+		for(const task_id in this.tasks) {
+			let task = this.tasks[task_id];
+
+			if(task.parent_id) {
+				this.branches[task.parent_id].children.push(task_id);
+			}
+		}
+	}
 }
 
 class Task {
@@ -77,49 +95,7 @@ class Task {
 		return cost_code_aggregated;
 	}
 
-	// calculate_cost_code(collections, cost_code_aggregated=this.cost_code, task=this) {
-	// 	if(!task.parent_id) {
-	// 		task.cost_code_aggregated = cost_code_aggregated;
-	// 	} else {
-	// 		let parent = collections.get_parent_by_id(task.parent_id);
-	// 		cost_code_aggregated = `${cost_code_aggregated}.${parent.cost_code}`;
-	// 		this.calculate_cost_code(collections, cost_code_aggregated, parent)
-	// 	}
-	// }
-
-	// calculate_cost_code(collections, cost_code_aggregated=this.cost_code_aggregated, task=this) {
-	// 	if(!task.parent_id) {
-	// 		if(!parent.parent_id) {
-	// 			task.cost_code_aggregated = task.cost_code;
-	// 		} else {
-	// 			task.cost_code_aggregated = `${task.cost_code}.${task.cost_code_aggregated}`;
-	// 		}
-	// 	} else {
-	// 		let parent = collections.get_parent_by_id(task.parent_id);
-	// 		cost_code_aggregated = `${task.cost_code}.${task.cost_code_aggregated}`
-	// 		task.calculate_cost_code(collections, cost_code_aggregated, parent)
-	// 	}
-	// }
-
-	// calculate_cost_code(
-	// 	collections, parent_id=this.parent_id, cost_code=this.cost_code
-	// ) {
-
-	// 	// temp code
-	// 	if (this.task_id = 1872) {
-	// 		console.log(this.task_id);
-	// 	}
-	// 	//
-
-	// 	if(!parent_id) {
-	// 		this.cost_code_aggregated = cost_code;
-	// 	} else {
-	// 		let parent = collections.get_parent_by_id(this.parent_id)
-	// 		parent_id = parent.parent_id;
-	// 		cost_code = `${parent.cost_code}.${cost_code}`;
-	// 		this.calculate_cost_code(collections, parent_id, cost_code);
-	// 	}
-	// }
+	calculate_total(collections) {}
 }
 
 class Branch extends Task {
@@ -152,6 +128,7 @@ export const handler = async (data) => {
 
 	collections.import(data);
 	collections.calculate_cost_codes();
+	collections.calculate_totals();
 
 	let pause;
 }
