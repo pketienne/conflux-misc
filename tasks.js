@@ -117,43 +117,19 @@ class Branch extends Task {
 	}
 
 	calculate_total(collection) {
-		this.total = this.recurse_total(collection, this.total, this);
+		this.total_z = this.recurse_total(collection, this.total, this); // change back to `total` from `total_z` when done testing.
 	}
 
 	recurse_total(collection, total, branch) {
-		return branch.child_ids.map((child_id) => {
+		let costs = branch.child_ids.map((child_id) => { // remove branch
 			let child = collection.tasks[child_id];
-			let child_klass = child.constructor.name;
-			
-			return total += child.net;
+			if(child.constructor.name == 'Leaf') {
+				return child.net;
+			} else {
+				return child.total;
+			}
 		})
-
-		// return branch.child_ids.map((child_id) => {
-		// 	let child = collection.tasks[child_id];
-		// 	let child_klass = child.constructor.name;
-			
-		// 	if(child_klass = 'Leaf') {
-		// 		return total += child.net;
-		// 	}
-		// })
-
-		// if(branch.children) {
-		// 	for (const child_id in branch.children) {
-		// 		let child = collection.tasks[branch.children[child_id]];
-		// 		let child_klass = child.constructor.name;
-
-		// 		switch(child_klass) {
-		// 			case 'Branch':
-		// 				return this.recurse_total(collection, total, child)
-		// 				break;
-		// 			case 'Leaf':
-		// 				return total += child.net;
-		// 				break;
-		// 			default:
-		// 				console.err('Error: Child class was neither `Branch` nor `Leaf`.')
-		// 		}
-		// 	}
-		// }
+		return costs;
 	}
 }
 
