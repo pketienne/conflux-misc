@@ -117,7 +117,7 @@ class Branch extends Task {
 	}
 
 	calculate_total(collection) {
-		this.total_z = this.recurse_total(collection, this.total, this); // change back to `total` from `total_z` when done testing.
+		this.total = this.recurse_total(collection, this.total, this); // change back to `total` from `total_z` when done testing.
 	}
 
 	recurse_total(collection, total, branch) {
@@ -126,9 +126,12 @@ class Branch extends Task {
 			if(child.constructor.name == 'Leaf') {
 				return child.net;
 			} else {
-				return child.total;
+				total += child.total;
+				return this.recurse_total(collection, total, child);
 			}
 		})
+		.reduce((acc, total) => acc.concat(total), [])
+		.reduce((acc, total) => acc + total, 0);
 		return costs;
 	}
 }
