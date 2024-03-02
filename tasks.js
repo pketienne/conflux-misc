@@ -1,12 +1,13 @@
 import { promises as fsp } from 'fs'
 
-class TasksCollection {
+
+class Collections {
 	constructor() {
-		this.collection = {};
-		this.branches_index = {};
-		this.leaves_index = {};
+		this.tasks = {};
+		this.branches = {};
+		this.leaves = {};
 	}
-	
+
 	import(data) {
 		const first_key = Object.keys(data)[0];
 		const first_value_length = data[first_key].length;
@@ -21,27 +22,31 @@ class TasksCollection {
 	}
 
 	add(datum) {
-		let task, cost_code;
+		let task, cost_code, task_id;
 
-		// Clean this up.
 		if(datum.branch_cost_code) {
-			// TODO: This is where `branches_index` gets populated.
 			cost_code = datum.branch_cost_code;
 			task = new Branch(datum, cost_code);
+			this.branches[task.branch_id] = task
 		} else if(datum.task_cost_code) {
-			// TODO: This is where `leaves_index` gets populated.
 			cost_code = datum.task_cost_code;
 			task = new Leaf(datum, cost_code);
+			this.leaves[task.leaf_id] = task
 		} else {
 			console.err('Error: Task was not type "Branch" nor "Leaf".');
 		}
-
-		this.collection[task.task_id] = task;
+		task_id = datum.task_id;
+		this.tasks[task_id] = task;
 	}
 
-	populate_parents() {
-		for(const task_id in this.collection) {
-			this.collection[task_id].generate_parent(this);
+	get_parent_by_id(id) {
+		let branch = this.branches[id];
+		return branch;
+	}
+
+	calculate_cost_codes() {
+		for(const task_id in this.tasks) {
+			this.tasks[task_id].calculate_cost_code(this);
 		}
 	}
 }
@@ -49,19 +54,73 @@ class TasksCollection {
 class Task {
 	constructor(datum, cost_code) {
 		this.task_id = datum.task_id;
-		this.parent = datum.task_branch;
-		this.cost_code = cost_code;
+		this.parent_id = datum.task_branch;
+		this.cost_code = `${cost_code}`;
+		this.cost_code_aggregated = '';
 		this.name = datum.task_name;
 		this.description = datum.task_description;
 	}
 
-	generate_parent(tasks_collection) {
-		let parent_id = this.parent;
-
-		this.parent = tasks_collection.get_task_by_task_id(this.parent);
+	calculate_cost_code(collections) {
+		this.cost_code_aggregated = this.recurse_cost_codes(
+			collections, this.cost_code, this
+		);
 	}
-}
 
+	recurse_cost_codes(collections, cost_code_aggregated, task) {
+		if(task.parent_id) {
+			let parent = collections.get_parent_by_id(task.parent_id);
+			cost_code_aggregated = `${parent.cost_code}.${cost_code_aggregated}`
+			return this.recurse_cost_codes(collections, cost_code_aggregated, parent)
+		}
+		let pause;
+		return cost_code_aggregated;
+	}
+
+	// calculate_cost_code(collections, cost_code_aggregated=this.cost_code, task=this) {
+	// 	if(!task.parent_id) {
+	// 		task.cost_code_aggregated = cost_code_aggregated;
+	// 	} else {
+	// 		let parent = collections.get_parent_by_id(task.parent_id);
+	// 		cost_code_aggregated = `${cost_code_aggregated}.${parent.cost_code}`;
+	// 		this.calculate_cost_code(collections, cost_code_aggregated, parent)
+	// 	}
+	// }
+
+	// calculate_cost_code(collections, cost_code_aggregated=this.cost_code_aggregated, task=this) {
+	// 	if(!task.parent_id) {
+	// 		if(!parent.parent_id) {
+	// 			task.cost_code_aggregated = task.cost_code;
+	// 		} else {
+	// 			task.cost_code_aggregated = `${task.cost_code}.${task.cost_code_aggregated}`;
+	// 		}
+	// 	} else {
+	// 		let parent = collections.get_parent_by_id(task.parent_id);
+	// 		cost_code_aggregated = `${task.cost_code}.${task.cost_code_aggregated}`
+	// 		task.calculate_cost_code(collections, cost_code_aggregated, parent)
+	// 	}
+	// }
+
+	// calculate_cost_code(
+	// 	collections, parent_id=this.parent_id, cost_code=this.cost_code
+	// ) {
+
+	// 	// temp code
+	// 	if (this.task_id = 1872) {
+	// 		console.log(this.task_id);
+	// 	}
+	// 	//
+
+	// 	if(!parent_id) {
+	// 		this.cost_code_aggregated = cost_code;
+	// 	} else {
+	// 		let parent = collections.get_parent_by_id(this.parent_id)
+	// 		parent_id = parent.parent_id;
+	// 		cost_code = `${parent.cost_code}.${cost_code}`;
+	// 		this.calculate_cost_code(collections, parent_id, cost_code);
+	// 	}
+	// }
+}
 
 class Branch extends Task {
 	constructor(datum, cost_code) {
@@ -89,10 +148,10 @@ class Leaf extends Task {
 }
 
 export const handler = async (data) => {
-	const tasks_collection = new TasksCollection();
+	const collections = new Collections();
 
-	tasks_collection.import(data);
-	tasks_collection.populate_parents();
+	collections.import(data);
+	collections.calculate_cost_codes();
 
 	let pause;
 }

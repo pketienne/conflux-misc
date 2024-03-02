@@ -108,7 +108,6 @@ class Task {
 		this.name = datum.task_name;
 		this.description = datum.task_description;
 	}
-
 }
 
 class Branch extends Task {
