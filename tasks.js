@@ -83,6 +83,7 @@ class Collections {
 class Task {
 	constructor(datum, cost_code) {
 		this.task_id = datum.task_id;
+		this.type = null;
 		this.parent_id = datum.task_branch;
 		this.cost_code = `${cost_code}`;
 		this.cost_code_aggregated = '';
@@ -106,20 +107,17 @@ class Task {
 	}
 
 	to_json() {
-		// Create and return an object populated with the appropriate properties. 
 		let json = {};
 
+		json['type'] = this.type;
 		json['cost_code_aggregated'] = this.cost_code_aggregated;
 		json['name'] = this.name;
 		json['description'] = this.description;
-		json['total'] = this.total || '';
 		json['quantity'] = this.quantity || '';
 		json['cost'] = this.cost || '';
 		json['tax'] = this.tax || '';
 		json['markup'] = this.markup || '';
-		json['net'] = this.net || '';
-		json['stages'] = this.stages || '';
-		json['category'] = this.category || '';
+		json['net'] = this.net || this.total;
 
 		return json;
 	}
@@ -128,8 +126,9 @@ class Task {
 class Branch extends Task {
 	constructor(datum, cost_code) {
 		super(datum, cost_code);
+		this.type = 'branch';
 		this.branch_id = datum.idtasks_branches;
-		this.total = 0; // `0` or `null`?
+		this.total = 0;
 		this.child_ids = [];
 	}
 
@@ -138,7 +137,7 @@ class Branch extends Task {
 	}
 
 	recurse_total(collection, total, branch) {
-		let costs = branch.child_ids.map((child_id) => { // remove branch
+		let costs = branch.child_ids.map((child_id) => {
 			let child = collection.tasks[child_id];
 			if(child.constructor.name == 'Leaf') {
 				return child.net;
@@ -156,6 +155,7 @@ class Branch extends Task {
 class Leaf extends Task {
 	constructor(datum, cost_code) {
 		super(datum, cost_code);
+		this.type = 'leaf';
 		this.leaf_id = datum.idtasks_leaves;
 		this.quantity = datum.item_quantity;
 		this.cost = datum.item_cost;
