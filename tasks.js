@@ -1,7 +1,7 @@
 import { promises as fsp } from 'fs'
 
 
-class Collections {
+class Collection {
 	constructor() {
 		this.tasks = {};
 		this.branches = {};
@@ -59,6 +59,12 @@ class Collections {
 		}
 	}
 
+	indent_names() {
+		for(const task_id in this.tasks) {
+			this.tasks[task_id].indent_name();
+		}
+	}
+
 	populate_children() {
 		for(const task_id in this.tasks) {
 			let task = this.tasks[task_id];
@@ -81,6 +87,8 @@ class Collections {
 }
 
 class Task {
+	static INDENTOR = '=';
+
 	constructor(datum, cost_code) {
 		this.task_id = datum.task_id;
 		this.type = null;
@@ -91,33 +99,47 @@ class Task {
 		this.description = datum.task_description;
 	}
 
-	calculate_cost_code(collections) {
+	calculate_cost_code(collection) {
 		this.cost_code_aggregated = this.recurse_cost_codes(
-			collections, this.cost_code, this
+			collection, this.cost_code, this
 		);
 	}
 
-	recurse_cost_codes(collections, cost_code_aggregated, task) {
+	recurse_cost_codes(collection, cost_code_aggregated, task) {
 		if(task.parent_id) {
-			let parent = collections.get_parent_by_id(task.parent_id);
+			let parent = collection.get_parent_by_id(task.parent_id);
 			cost_code_aggregated = `${parent.cost_code}.${cost_code_aggregated}`
-			return this.recurse_cost_codes(collections, cost_code_aggregated, parent)
+			return this.recurse_cost_codes(collection, cost_code_aggregated, parent)
 		}
 		return cost_code_aggregated;
 	}
 
+	indent_name() {
+		let name = '';
+		let levels = (this.cost_code_aggregated.match(/\./g) || []).length;
+		while(0 < levels) {
+			name += Task.INDENTOR;
+			levels--;
+		}
+		this.name = `${name}> ${this.name}`;
+	}
+
 	to_json() {
+		let usd = new Intl.NumberFormat(
+			'en-us', {style: 'currency', currency: 'USD'}
+		)
 		let json = {};
 
-		json['type'] = this.type;
-		json['cost_code_aggregated'] = this.cost_code_aggregated;
-		json['name'] = this.name;
-		json['description'] = this.description;
-		json['quantity'] = this.quantity || '';
-		json['cost'] = this.cost || '';
-		json['tax'] = this.tax || '';
-		json['markup'] = this.markup || '';
-		json['net'] = this.net || this.total;
+		json.type = this.type;
+		json.code = this.cost_code_aggregated;
+		json.name = this.name;
+		json.description = this.description;
+		json.qty = this.quantity || '';
+		json.cost = this.cost_aggregated || '';
+		json.net = this.net || this.total;
+
+		if(json.cost) json.cost = usd.format(json.cost);
+		if(json.net) json.net = usd.format(json.net);
 
 		return json;
 	}
@@ -161,6 +183,7 @@ class Leaf extends Task {
 		this.cost = datum.item_cost;
 		this.tax = datum.item_tax;
 		this.markup = datum.item_markup;
+		this.cost_aggregated = this.cost * (1 + this.tax) * (1 + this.markup);
 		this.net = (
 			this.cost * this.quantity * (1 + this.tax) * (1 + this.markup)
 		)
@@ -169,17 +192,18 @@ class Leaf extends Task {
 	}
 }
 
-export const handler = async (data) => {
+function handler(data) {
 	let json;
-	const collections = new Collections();
+	const collection = new Collection();
 
-	collections.import(data);
-	collections.calculate_cost_codes();
-	collections.calculate_totals();
+	collection.import(data);
+	collection.calculate_cost_codes();
+	collection.indent_names();
+	collection.calculate_totals();
 	
-	json = collections.to_json();
+	json = collection.to_json();
 	json.sort((a, b) => {
-		return a.cost_code_aggregated.localeCompare(b.cost_code_aggregated)
+		return a.code.localeCompare(b.code)
 	})
 
 	return json;
@@ -189,6 +213,9 @@ async function json() {
 	let json = await fsp.readFile(`tasks.json`, 'utf-8')
 	return JSON.parse(json)
 }
+
+// let data = handler({{fetchAllProjectTasks.data}});
+// return data;
 
 let data = await json()
 if (data) handler(data)
