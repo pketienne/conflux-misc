@@ -1,0 +1,304 @@
+Project conflux {
+	database_type: 'PostgreSQL'
+	note: '''
+	# Parent / Child Relationships
+	There are a few different strategies for how to go about this:
+	- LTREE: Available in PostgreSQL (maybe).
+	- VARCHAR: Use a text field to represent a json-style array.
+	- Tables: Use `parents` and `children` tables and populate with ids.
+
+	# Job Costing: Pros and Cons of Nested vs Flat Representations
+	I don't know that it makes a ton of difference either way. It's kinda cool to 
+	use recursion to parse through nested structures. It seemed/seems that the 
+	main purpose of using nested structures was to:
+
+	1. Ensure appropriate sorting through an aggregated cost code.
+	1. Enable use of delimiters between codes of different nested depths.
+	1. Allow an arbitrary number of digits to represent a particular level of depth.
+
+	Either method (nested or flat) can (easily) satisfy all three constraints. 
+	Now that I'm getting into concerns more specifically related to accounting, it 
+	does seem like the nested structure is likely unnecessary. Id est, the 
+	necessary operations around accounting seem to be significantly simpler 
+	using a flat list, where the nested structure takes more work both to 
+	calculate values and to represent in the database. 
+
+	Not worth changing anything IMO, just a note worth keeping in mind for the 
+	future.
+
+	# Accounting versus Job Costing
+	Food for thought: Are there feasible ways that we could more significantly 
+	decouple the legal purpose from the profitability question? Id est, use 
+	accounting practices for accounting, and use job costing practices for job 
+	costing? Does it feel like we're mixing things that shouldn't be?
+	'''
+}
+
+note contacts_persons_companies {
+	'''
+	Contacts, persons, and companies get smushed into one table.
+	'''
+}
+
+table contacts {
+	id integer [pk, not null]
+	person_id integer [ref: - persons.id]
+	company_id integer [ref: - companies.id]
+	parents varchar
+	children varchar
+	notes longtext
+}
+
+table persons {
+	id integer [pk, not null]
+	name_first varchar [not null]
+	name_middle varchar
+	name_last varchar
+	ssn integer
+}
+
+table companies {
+	id integer [pk, not null]
+	company_type company_types
+	name varchar
+	dba varchar
+	ein integer
+}
+
+note our_companies {
+	'''
+	If we get to a point where this table is necessary, we can put one in. At the 
+	moment, it isn't necessary. It's just (what we're now calling) a contact. If 
+	we're smushing companies into a table with other things, any data that would 
+	live in this table would just belong in the table that subsumes 'company' 
+	unless that table would also have existed if those three tables were separate.
+	'''
+}
+
+table ownerships {
+	id integer [pk, not null]
+	company_id integer [ref: > companies.id]
+	contact_id integer [ref: > contacts.id]
+	investment decimal [not null]
+	percentage decimal [not null]
+	notes varchar
+	note: '''
+	As there are no more companies, the `company_id` and `companies.id` here 
+	become an additional `contact_id` and `contacts.id`, though something like 
+	"owner" and "ownee" field suffixes (for lack of better terms) would be needed.
+	'''
+}
+
+note phones_email_addresses {
+	'''
+	Phones, emails, and (maybe) addresses all get smushed into the contacts table.
+	'''
+}
+
+table phones {
+	id integer [pk, not null]
+	primary boolean [not null]
+	contact_id integer [ref: > contacts.id, not null]
+	country_code integer [not null]
+	area_code integer [not null]
+	prefix_code integer [not null]
+	suffix_code integer [not null]
+}
+
+table emails {
+	id integer [pk, not null]
+	primary boolean [not null]
+	contact_id integer [ref: > contacts.id, not null]
+	prefix varchar [not null]
+	domain varchar [not null]
+	extension varchar [not null]
+}
+
+table contacts_addresses {
+	id integer [pk, not null]
+	primary boolean [not null]
+	contact_id integer [ref: > contacts.id, not null]
+	address_id integer [ref: > addresses.id, not null]
+}
+
+table addresses {
+	id integer [pk, not null]
+	line_1 varchar [not null]
+	line_2 varchar
+	city varchar [not null]
+	state varchar [not null]
+	zip_code integer [not null]
+	zip_ext integer
+}
+
+table properties {
+	id integer [pk, not null]
+	contact_id_owner integer [ref: > contacts.id]
+	address_id integer [ref: - addresses.id]
+	parcel_number integer
+	notes longtext
+}
+
+table units {
+	id integer [pk, not null]
+	property_id integer [ref: > properties.id, not null]
+	address_id integer [ref: - addresses.id, not null]
+	passcode varchar [note: "This could be broken out into it's own table, as a particular lock may have more than one valid passcode depending on the user. This could also potentially be subsumed by the logins table."]
+	notes longtext
+	note: '''
+	FWIW, I'd originally called this table "unit", and Oliver changed the name of 
+	it to "dwelling_unit", then back again to "unit". I don't remember what his 
+	rationale was. Either is fine by me. We may eventually have something else 
+	that we'd want to call "unit", so namespacing this could be good.
+	'''
+}
+
+note contact_contracts_leases_etc {
+	'''
+	In the `osm` dbml file, the tables `vendors` and `vendor_types` are used. I'd 
+	remove this for the same reason I removed the `our_companies` table. There's 
+	currently no purpose for it, it's just a `contact`. The `contacts` table could 
+	have a `contact_type` added, or even a `business_type`, but adding a whole 
+	additional table for it is superfluous (at the moment). Instead, I've just 
+	added a `contracts` table. I've added (or carried over) the option of having a 
+	`contract_types` enum, but I can't say I know yet what values might go there, 
+	though I did populated it with what could eventually be appropriate values. I 
+	also added a `frequency` field, along with a `frequency_type` field and a 
+	`frequency_types` enum, but I'm not satisfied with it as a solution.
+
+	Generalizing the purpose of the table is a good, but I'll need to come back 
+	to this.
+	'''
+}
+table contact_contracts {
+	id integer [pk, not null]
+	contact_id integer [ref: > contacts.id, not null]
+	contract_id integer [ref: > contracts.id, not null]
+}
+
+table contracts_leases {
+	id integer [pk, not null]
+	contract_id integer [ref: - contracts.id]
+	unit_id integer [ref: > units.id, not null]
+}
+
+table contracts {
+	id integer [pk, not null]
+	contact_id integer [ref: < contacts.id]
+	contract_type contract_types
+	account_number integer
+	sign date
+	start date
+	end date
+	due date
+	amount decimal
+	amount_is_exact boolean
+	frequency integer
+	frequency_type frequency_types
+	notes longtext
+}
+
+enum contract_types {
+	rental
+	utility
+	construction
+}
+
+enum frequency_types {
+	monthly
+	quarterly
+	yearly
+}
+
+table logins {
+	id integer [pk, not null]
+	contract_id integer [ref: > contracts.id]
+	username varchar
+	password varchar
+	url varchar
+	notes longtext
+	note: "Probably best just to attach this to the contract for the time being."
+}
+
+note accounts_account_types_etc {
+	'''
+	After working on the "estimates" section of our current Retool app, I've 
+	realized that we could have used a more traditional style of accounting codes 
+	and just handled all of the particular needs we had as presentation concerns 
+	within the presentation layer. That probably would have been easier.
+
+		
+	'''
+}
+
+table accounts {
+	id integer [pk, not null]
+	company_id integer [ref: > companies.id]
+	name varchar
+	account_type account_types
+	account_category_id integer [ref: - account_categories.id]
+	notes longtext
+}
+
+enum account_types {
+	asset
+	liability
+	income
+	expense
+	equity
+}
+
+table account_categories {
+	id integer [pk, not null]
+	code integer
+	parent_id integer [ref: - account_categories.id, not null]
+	children_ids varchar
+	name varchar [not null]
+	description longtext
+}
+
+note bank_transactions_transactions_transaction_types_etc {
+	'''
+	Bank transactions should be captured on their own as they're pulled in from an 
+	external source. Do we want to capture individual "imports" as groups of 
+	transactions?
+	'''
+}
+
+table bank_transactions {
+	id integer [pk, not null]
+	transaction_type transaction_types
+	posted date
+	amount decimal
+	fitid integer
+	name varchar
+	memo varchar
+	notes longtext
+}
+
+enum transaction_types {
+	credit
+	debit
+}
+
+table transactions {
+	id integer [pk, not null]
+}
+
+table transaction_lines {
+	id integer [pk, not null]
+	transaction_id integer [ref: > transactions.id, not null]
+	account_id_credit integer [ref: - accounts.id, not null]
+	account_id_debit integer [ref: - accounts.id, not null]
+	amount decimal
+	notes longtext
+}
+
+note resources {
+	'''
+	- https://dba.stackexchange.com/questions/102370/double-entry-bookkeeping-database-design
+	- https://i.stack.imgur.com/jt0u2.png
+	- https://blog.journalize.io/posts/an-elegant-db-schema-for-double-entry-accounting/
+	- https://waveapps.com/ (chart of accounts)
+	'''
+}
