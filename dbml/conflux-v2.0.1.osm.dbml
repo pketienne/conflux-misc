@@ -18,7 +18,7 @@ Table "contacts" {
   "notes" VARCHAR
   "email" VARCHAR [not null]   // I removed the subdomain, etc and put it into one. I can imagine a bunch more use cases where we need the whole email than cases where we need any component individually. I'll listen if you want to make the case to switch it back... 
   "phone_number" VARCHAR  // again, I removed the breakdown of the phone into component parts. We will be reassembaling this a lot more than we will be disassemballing. I don't think this is actually an int, either, I think it's probably a varchar? Phone numbers can be complex if they are international? I don't know what to do here. I'll listen if you want to switch it back... 
-  "address" INT [ref: < addresses.address_id]  //I'm not 100% sure I like this. We will ahve to make sure that we don't end up accidentailly changing other addressess or something. I left it in here because I definately want to the functionality to be able to use a validated address service of some sort in the future. 
+  "address" INT [ref: < addresses.address_id]  //I'm not 100% sure I like this. We will ahve to make sure that we don't end up accidentailly changing other addressess or something. I left it in here because I definately want to the functionality to be able to use a validated address service of some sort in the future.
 }
 
 Table "addresses" {
