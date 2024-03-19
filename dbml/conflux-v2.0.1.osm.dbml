@@ -1,0 +1,204 @@
+Project conflux {
+	database_type: 'MySQL' //postgres? //Whatever we are going to use with Amazon thing? 
+}
+
+Table "contacts" {
+	"contact_id" INT [pk, not null]
+  "name" VARCHAR
+	"dba" VARCHAR
+	"ein" INT	 //enforce length?
+  "ssn" INT  //enforce length?
+  // what we want for association here isn't a "tree" form, I don't think. I do like the idea of capturing relationship data
+  //between different people somehow, but in a "tree" form a child can have only one parent, whereas out there in the world we
+  //usually have two and especially in the cases we're talking about here. We could even want to store a freeform relationship type?
+  //such as "child" or "employee" or "cousin" or "hates this person a lot and won't work with them" or something? 
+  //this also may be a fun feature that we don't need right away and really would only have a ton of value with good data visualization... 
+  //"company_id_parent" INT  
+	//"company_ids_children" VARCHAR	// same as above ^^^
+  "notes" VARCHAR
+  "email" VARCHAR [not null]   // I removed the subdomain, etc and put it into one. I can imagine a bunch more use cases where we need the whole email than cases where we need any component individually. I'll listen if you want to make the case to switch it back... 
+  "phone_number" VARCHAR  // again, I removed the breakdown of the phone into component parts. We will be reassembaling this a lot more than we will be disassemballing. I don't think this is actually an int, either, I think it's probably a varchar? Phone numbers can be complex if they are international? I don't know what to do here. I'll listen if you want to switch it back... 
+  "address" INT [ref: < addresses.address_id]  //I'm not 100% sure I like this. We will ahve to make sure that we don't end up accidentailly changing other addressess or something. I left it in here because I definately want to the functionality to be able to use a validated address service of some sort in the future. 
+}
+
+Table "addresses" {
+  "address_id" INT [pk, not null]
+  "line_1" VARCHAR
+	"line_2" VARCHAR
+	"city" VARCHAR
+	"state" VARCHAR
+	"zip_code" INT
+	"zip_ext" INT
+  // I kept this broken out rather than putting it back in contacts as I wanted to origionally. 
+  // the reason I kept it broken out is that I think it would be a nice feature to have a validated address
+  // and use something like openaddressess.io.... or something that google or amazon provide? 
+  // I don't know how difficult something like that would be and I don't think it's a core feature, but I do think that
+  // it's worth having something like this as a stub for future use. 
+}
+
+Table "our_companies" {	 //try for a better name here. This is companies that we are responsibile for, not general companies out there in the world.
+	"company_id" INT [pk, not null]
+  "contact_id" INT [ref: < contacts.contact_id] // foreign key to contact, this table extends contacts. 
+  // additional informaiton
+}
+
+Table "leases" {
+	"lease_id" INT [pk, not null]
+	"unit_id" INT [ref: < dwelling_units.dwelling_id]
+	"sign" DATE
+	"start" DATE
+	"end" DATE
+	"due" DATE
+	"rent" INT
+	"notes" VARCHAR
+	// probably a bunch of other fields in here like... ? 
+	// security deposit
+	// pet deposit
+  // the payment scheudle gets generated from this
+}
+
+Table "tenants" {	 // reverting this name back to tenants
+	"tenant_id" INT [pk, not null]
+  "lease_id" INT [ref: < leases.lease_id]
+	"contact_id" INT [ref: < contacts.contact_id]	 // yeah, it's a lease id on the other end, but it's a tenant now... I think it's a table name problem. 
+	// this is how someone leases a property. Many people can lease many properties
+}
+
+Table "expected_transactions" {	//"PAYMENT SCHEDULE?" this name might be wrong. Maybe it should be "scheduled payments" or something... it is a table of expected values... the "payment schedule" would be generated from it. 
+	"expected_transaction_id" INT [pk, not null]
+	"lease_id" INT [ref: < leases.lease_id]
+  "vendor_id" INT [ref: < vendor_contracts.vendor_contract_id]
+	"amount" MONEY
+	"due" DATE
+	"notes" VARCHAR
+  "exact?" BOOLEAN // are we expecting an exact amount here or an estimated amount? This helps with budgeting. If we are expecting exact amounts then we can throw errors when they are not met. If we are expecting budget numbers then we can display over/under
+}
+
+Table "properties" {
+	"property_id" INT [pk, not null]
+	"property_owner" INT [ref: < our_companies.company_id] // this was a definate oversight in the last ERD... it's also an interesting problem. This definiation means that we only track property owners for "our companies"
+  // this is generally true, I guess? We need to think through what this relationship does for us, exactly? 
+  // at this point, if a property has multiple owners then that multiple owner situation is a PARTNERSHIP and that partnership must be a company in our system and... probably legally as well? In any case, 
+  //I don't think we need to support multiple ownership outside partnership... Multiple ownership is supported through the "ownerships table" And, in our situation there isn't a situation where people own properties, they own companies. 
+	"address_id" INT [ref: < addresses.address_id]
+	"parcel_number" VARCHAR
+	"notes" VARCHAR
+}
+
+Table "ownerships" {	//why did we change this from partnerships?
+	"ownership_id" INT [pk, not null]
+  "contact_id" INT [ref: < contacts.contact_id]
+  "company_id" INT [ref: < our_companies.company_id]
+	"investment" INT [not null]
+	"percentage" INT [not null]
+}
+
+Table "dwelling_units" { //I do not like the name "units" because it is too vague. I know you think this is a weird name, but it is industry standard language and has a precises meaning
+	"dwelling_id" INT [pk, not null]
+	"property_id" INT [ref: < properties.property_id]
+	"address_id" INT [ref: < addresses.address_id]
+	"passcode" INT	// would this be in "logins"? 
+	"notes" VARCHAR
+}
+
+Table "vendors" {	 // attempting to replace "utilities" with "vendors" because it's more universal. 
+	  "vendor_id" INT [pk, not null]
+	  "contact_id" INT [ref: < contacts.contact_id]
+	  "vendor_type" INT [ref: < vendor_types.vendor_type_id]
+}
+
+Table "vendor_types" {
+	  "vendor_type_id" INT [pk, not null]
+	  "type" VARCHAR
+}
+
+// this is something like lease, it's an agreement between a property (at this time, until we extend this database some to cover the construction company) and a vendor
+// So, for instance, we have an agreement with Citizen's Energy, the utility, to for them to provide us gas, this has some standard terms, probably? and then it will also have an associated payment schedule? 
+// I'm trying this out to see if we can make this look like leases, because it kind of is. And I'm also trying to see if we can make this similar to our contacts with the construciton company since we have incoming and outgoing contracts
+// where we provide services, have a payment schedule, etc, and the other way around. 
+//this will hopefully be the basis for payment schedules which will be the basis for budgeting?
+// 
+// this could be ALL TYPES Of vendor contracts now, including payments to the construciton company for services, lawn mowing, accounting!
+// 
+// I think this vendor contracts thing is great. 
+Table "vendor_contracts" { 
+  "vendor_contract_id" INT [pk, not null]
+  // so this is going to be a contract between two parties
+  "vendor_id" INT [ref: < vendors.vendor_id]
+  // this is where it gets trickey. The vendee can be many different types of things! It can be a property, it can be a dwelling unit, and it can be all manner of other 
+  //shit probably, especially after the DB is extended for MDB
+  // I'm going to do it this way to visualize it for now, but we should spend some time figuring out a better way to do this. 
+  // there may even be a way in which we combine this with leases to make a more uniform type of system, but that may be more of a pain in the ass than it's worth? 
+  "vendee_id_property" INT [ref: < properties.property_id]
+  "vendee_id_dwelling_unit" INT [ref: < dwelling_units.dwelling_id]   // not sure if this is the correct way to do this, we are going to end up with al ong list of these when we extend this DB to MDB... 
+  "contract_amount" MONEY  // this should be a currency type, if it exists? 
+  "contract_amount_is_estimate" BOOLEAN // hey, are we expecting this to be an exact amount or an estiamte? 
+  "contract_amount_frequency" VARCHAR // is this contract going to be paid once a month, once a year, every 3 days, what?  // how will this be done? yearly budgeting system generates expected vendor payments for the next 12 months? 
+  "start" DATE
+  "end" DATE // if end date is null then fill the payment schedule out into infinity? how does this work? 
+  "notes" VARCHAR    //varchar isn't long enough for our notes I don't think? 
+  "account_number" INT 
+  "documents" INT // connect to documents? probably would be a many to many
+  "logins" INT // connect to logins? not sure? 
+  // there's some world in which this gets combined with "leases", but I am not willing to go there right now because the concept is a little too new to me. Seems like it would possibly work? But I'm not sure if it's necessary. 
+}
+
+Table "logins" {
+	"login_id" INT [pk, not null]
+	// login name (Blanton - AES)
+	// logging into what from what for what? 
+	// these could be related to utilities, to bank accounts, and maybe to other things also? 
+	"contact_id" INT [not null]
+	"username" VARCHAR
+	"password" VARCHAR
+	"url" VARCHAR
+	"notes" VARCHAR
+  "logging_in_to_what" VARCHAR // are we logging in to a company? That is is this a utility's login? Or.. a vendor? or...? what? 
+  "logging_in_for_what?" VARCHAR // what are we logging in for? Is this related to a rental property? Which one? 
+  "relationships?" VARCHAR    // is there just a general relationship here, such as we have conceived for documents? 
+}
+
+Table "accounts" {
+  "account_id" INT [pk, not null]
+  "name" VARCHAR
+  "type" INT [ref: < account_type.account_type_id]
+  "code" INT
+  "category" INT [ref: <account_category.account_category_id]
+  "company_id" INT [ref: <our_companies.company_id]
+}
+
+Table "account_type"{
+  "account_type_id" INT
+  "name" VARCHAR
+}
+
+Table "account_category" { // creates the ability to make nested structures
+  "account_category_id" INT
+  "name" VARCHAR
+  "code" INT // accounting code, will build these up when buliding the tree. 
+  "parent_category_id" INT [ref: < account_category.account_category_id]
+  "children_ids" OBJECT// this thing should probably know it's parents AND children! I don't know how to do that exactly. 
+}
+
+Table "transactions" {
+  "transaction_id" INT
+  "amount" MONEY
+  "date" DATE
+  "notes" LONGTEXT
+  "account_from_id" INT [ref: < accounts.account_id]
+  "fitid" INT // some bank nonsense? 
+  "name" LONGTEXT
+  "memo" LONGTEXT
+  "type" VARCHAR // what is this? 
+}
+
+Table "account_to_link" { // not a great name, this sends the money coming in from one account out to one or many other accounts, allowing for SPLITS!!
+  "ledger_entry_id" INT // not sure about this name
+  "transaction_id" INT [ref: < transactions.transaction_id]
+  "amount" MONEY // we need to make sure the amounts match, but that's a thing for the front end I think? 
+  "account_to_id" INT [ref: < accounts.account_id] // the account that the money goes into 
+  "notes" LONGTEXT 
+  // NOW, we can put this amount in a BUDGET!
+  "expected_transaction_link" INT [ref: < expected_transactions.expected_transaction_id] //name sucks I think, but this is linking this amount with an expected payment!
+  // FLAG FOR ADMIN REVIEW! What if there isn't the expected transaction to link it to? 
+}

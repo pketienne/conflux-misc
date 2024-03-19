@@ -1,0 +1,8 @@
+Project 'conflux' {
+	database_type: 'MySQL'
+}
+
+Table 'contacts' {
+	'id' INT [pk, not null]
+	
+}
