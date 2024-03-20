@@ -218,8 +218,8 @@ table ContractsLeases {
 
 table Contracts {
 	id integer [pk, not null]
-	contact_id integer [ref: < Contacts.id]
-	contract_type contract_types
+//	contact_id integer [ref: < Contacts.id]
+	contract_type ContractTypes
 	account_number integer
 	sign date
 	start date
@@ -242,6 +242,7 @@ enum FrequencyTypes {
 	monthly
 	quarterly
 	yearly
+	// how do contracts that are partially monthly but then have a daily rate work? such as a furnished finder that is from one random date to another? 
 }
 
 table Logins {
@@ -255,6 +256,8 @@ table Logins {
 	We may want to do more with this later, but attaching to contract is fine for 
 	the time being.
 	'''
+
+	// door locks. // wifi passwords? // other random passwords! 
 }
 
 note AccountsAccountTypesEtc {
@@ -292,9 +295,8 @@ enum AccountTypes {
 
 table Transactions {
 	id integer [pk, not null]
-	transaction_id_match integer [ref: - Transactions.id]
-	account_id integer [ref: - Accounts.id, not null]
-	transaction_categorizations_id integer [ref: < Accounts.id, not null]
+	transaction_id_match integer [ref: - Transactions.id] // this is matching to another transaction: EG. from expected to actual. That would be ALWAYS from expected to actual. 
+	account_id integer [ref: - Accounts.id, not null]  // money coming FROM on a transaction. Find a different name for this and the next one? 
 	posted date [not null]
 	name varchar [not null]
 	amount decimal [not null]
@@ -312,31 +314,35 @@ table Transactions {
 	populated with a `transaction_id` which refers to the matching "actual" (not-
 	virtual) transaction.
 	'''
+
+	// can we use this same model for expenses / receipts ? 
 }
 
-table TransactionCategorizations {
+table TransactionCategorizations {  // funcationality for splits
 	id integer [pk, not null]
-	account_id integer [ref: - Accounts.id, not null]
+	account_id integer [ref: < Accounts.id, not null]
+	transaction_id integer [ref: < Transactions.id, not null]
 	amount decimal [not null]
 }
 
 table TransactionsBank {
 	id integer [pk, not null]
-	account_id integer [ref: - Accounts.id, not null]
-	transaction_id integer [ref: - Transactions.id]
+	account_id integer [ref: < Accounts.id, not null]
+	transaction_id integer [ref: - Transactions.id] // extending this table 
+	import integer [ref: < ImportsBank.id]
 	fitid integer [not null]
-	posted date [not null]
-	name varchar [not null]
+//	date_posted date [not null] 
+	//name varchar [not null]
 	memo varchar [not null]
-	amount decimal [not null]
-	trasnaction_type TransactionTypes [not null]
+	//amount decimal [not null]  // don't need this? 
+	//transaction_type TransactionTypes [not null]
 }
 
-table StatementsBank {
+table ImportsBank {  // is this technically statements or is it more like imports? 
 	id integer [pk, not null]
-	account_id integer [ref: - Accounts.id, not null]
+	account_id integer [ref: < Accounts.id, not null]
 	account_type account_types [not null]
-	account integer [not null]
+	account_number integer [not null]
 	exported date [not null]
 	imported date [not null]
 	start date [not null]
