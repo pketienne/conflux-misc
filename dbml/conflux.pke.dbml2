@@ -1,0 +1,497 @@
+Project Conflux {
+	database_type: 'PostgreSQL'
+	note: '''
+	# Parent / Child Relationships
+	There are a few different strategies for how to go about this:
+	- LTREE: Available in PostgreSQL (maybe).
+	- VARCHAR: Use a text field to represent a json-style array.
+	- Tables: Use `parents` and `children` tables and populate with ids.
+
+	# Job Costing: Pros and Cons of Nested vs Flat Representations
+	I don't know that it makes a ton of difference either way. It's kinda cool to 
+	use recursion to parse through nested structures. It seemed/seems that the 
+	main purpose of using nested structures was to:
+
+	1. Ensure appropriate sorting through an aggregated cost code.
+	1. Enable use of delimiters between codes of different nested depths.
+	1. Allow an arbitrary number of digits to represent a particular level of depth.
+
+	I was thinking about it today and realized that either method (nested or flat) 
+	can satisfy all three constraints. Now that I'm getting into concerns more 
+	specifically related to accounting (looking into database designs for 
+	accounting), it does seem like using a flat structure might be easier to 
+	maintain. Id est, the necessary operations around accounting seem to be 
+	simpler using a flat list, where the nested structure takes more work both to 
+	calculate values and to represent in the database. 
+
+	I'm not suggesting that we change anything, just noting the realization for 
+	future reference.
+
+	# Modeling inheritance in RDBs.
+	There are three ways to model inheritance in relational database systems.
+	1. One table for the whole hierarchy, plus a discrimenator.
+	1. One table per entity, self-fields only (requires joins, no discrimenator).
+	1. One table per entity, inherited fields (no joins, no discriminator, data 
+		 duplication).
+
+	For example, when implementing tasks, branches, and leaves for Estimates in 
+	Retool, the second method was used, except that at least one field was on the 
+	wrong table and some fields were named deceptively.
+
+	# Naming Conventions
+	- Table names use PascalCase.
+	- Table names are plural.
+	- Use single words where feasible, but use more to avoid name collsions.
+	- There's not a feasible way to use names to distinguish between:
+	  - Tables which exist solely to implement Many-to-Many relationships.
+		- Tables which implement inheritance.
+	- It is possible to use a different pattern for tables which need more than 
+		one word as a descriptor.
+	- Tables whose first PascalCase word is singular, denote a relationship to a 
+		more detailed bit of related info. E.g. `Accounts` & `AccountTypes`.
+	'''
+}
+
+note ContactsPersonsCompanies {
+	'''
+	Contacts, persons, and companies get smushed into one table.
+
+	The method I used for `Contacts`, `Persons`, and `Companies` was the second 
+	method mentioned in the "Modeling Inheritance" note. Smushing those three 
+	entities into one table would mean opting for method number one or three.
+	'''
+}
+
+table Contacts {
+	id integer [pk, not null]
+	parents varchar
+	children varchar
+	notes longtext
+}
+
+table Persons {
+	id integer [pk, not null]
+	contacts_id integer [pk, not null]
+	name_first varchar [not null]
+	name_middle varchar
+	name_last varchar
+	ssn integer
+}
+
+table Companies {
+	id integer [pk, not null]
+	contacts_id integer [pk, not null]
+	name varchar
+	dba varchar
+	ein integer
+}
+
+note OurCompanies {
+	'''
+	As it exists at the moment, this is just a stub. We can add in something like 
+	this in the future if needed, but when you think about the data that might go 
+	in here, consider whether what you want to know about "our companies" might 
+	better be modeled as derived info (somewhat like a computed value) from other 
+	tables in the database. For now, I'd just leave this as a contact.
+	'''
+}
+
+table Ownerships {
+	id integer [pk, not null]
+	company_id integer [ref: > Companies.id]
+	contact_id integer [ref: > Contacts.id]
+	investment decimal [not null]
+	percentage decimal [not null]
+	notes varchar
+	note: '''
+	As companies got subsumed by contacts, the `company_id` and `companies.id` 
+	here become an additional `contact_id` and `contacts.id`, though something 
+	like "owner" and "ownee" field suffixes would be needed.
+	'''
+}
+
+note PhonesEmailAddresses {
+	'''
+	Phones, emails, and (maybe) addresses all get smushed into the contacts table.
+
+	See also: the `ContactsPersonsCompanies` note.
+	'''
+}
+
+table Phones {
+	id integer [pk, not null]
+	primary boolean [not null]
+	contact_id integer [ref: > Contacts.id, not null]
+	country_code integer [not null]
+	area_code integer [not null]
+	prefix_code integer [not null]
+	suffix_code integer [not null]
+}
+
+table Emails {
+	id integer [pk, not null]
+	primary boolean [not null]
+	contact_id integer [ref: > Contacts.id, not null]
+	prefix varchar [not null]
+	domain varchar [not null]
+	extension varchar [not null]
+}
+
+table ContactsAddresses {
+	id integer [pk, not null]
+	primary boolean [not null]
+	contact_id integer [ref: > Contacts.id, not null]
+	address_id integer [ref: > Addresses.id, not null]
+}
+
+table Addresses {
+	id integer [pk, not null]
+	line_1 varchar [not null]
+	line_2 varchar
+	city varchar [not null]
+	state varchar [not null]
+	zip_code integer [not null]
+	zip_ext integer
+}
+
+table Properties {
+	id integer [pk, not null]
+	contact_id_owner integer [ref: > Contacts.id]
+	address_id integer [ref: - Addresses.id]
+	parcel_number integer
+	notes longtext
+}
+
+table Units {
+	id integer [pk, not null]
+	property_id integer [ref: > Properties.id, not null]
+	address_id integer [ref: - Addresses.id, not null]
+	passcode varchar [note: "This could be broken out into it's own table, as a particular lock may have more than one valid passcode depending on the user. This could also potentially be subsumed by the logins table."]
+	notes longtext
+	note: '''
+	The term "unit" is fairly general. I don't remember why, but you changed it 
+	back to `unit` from `dwelling_unit`. I'm happy to use the industry term. It's 
+	also likely that we might have a "unit" of a different kind at some point, so 
+	namespacing "unit" might be good.
+	'''
+}
+
+note ContactContractsLeasesEtc {
+	'''
+	I like the idea of thinking about things in terms of vendors/suppliers, except 
+	that (like `our_companies` and `tenants`) it would be redundant with the 
+	`contacts` table that we already have. Since we already have `persons` and 
+	`companies` subsumed by the `contacts` table, it'd be fine to add a 
+	`contact_type` or even `vendor_type` field on the `contacts` table if we 
+	needed it.
+
+	I also like the idea of generalizing "contracts" in such a way that we can 
+	capture other kinds of contracts in addition to leases. The other kinds of 
+	contracts I could think of at the moment would be things like utilities,
+	construction, or even registering license plates for the fleet with the state 
+	government. Below, instead of `leases`, I have a table for `contracts`. I also 
+	have a table for `contact_contracts` to allow m2m relationships for those 
+	contracts (e.g. leases), but I've also abstracted out a `contracts_leases` 
+	table which holds the `unit_id` just as an example of what might need to be 
+	done to capture different kinds of contracts.
+
+	For leasing and utility "contracts", I've added enums for `contract_types` and 
+	`frequency_types`. The `frequency_types` listed should work for those 
+	particular kinds of contracts (because really they're both monthly), but I'd 
+	guess that this particular implementation won't be sufficient for other kinds 
+	of contracts that we might want to model in the futre, I think this will work 
+	for now.
+	'''
+}
+
+table ContactContracts {
+	id integer [pk, not null]
+	contact_id integer [ref: > Contacts.id, not null]
+	contract_id integer [ref: > Contracts.id, not null]
+}
+
+table ContractsLeases {
+	id integer [pk, not null]
+	contract_id integer [ref: - Contracts.id]
+	unit_id integer [ref: > Units.id, not null]
+}
+
+table Contracts {
+	id integer [pk, not null]
+	contact_id integer [ref: < Contacts.id]
+	contract_type contract_types
+	account_number integer
+	sign date
+	start date
+	end date
+	due date
+	amount decimal
+	amount_is_exact boolean
+	frequency integer
+	frequency_type FrequencyTypes
+	notes longtext
+}
+
+enum ContractTypes {
+	rental
+	utility
+	construction
+}
+
+enum FrequencyTypes {
+	monthly
+	quarterly
+	yearly
+}
+
+table Logins {
+	id integer [pk, not null]
+	contract_id integer [ref: > Contracts.id]
+	username varchar
+	password varchar
+	url varchar
+	notes longtext
+	note: '''
+	We may want to do more with this later, but attaching to contract is fine for 
+	the time being.
+	'''
+}
+
+note AccountsAccountTypesEtc {
+	'''
+	Might this section be best thought of in terms of three different purposes:
+	1. Accounting
+	1. Budgeting
+	1. Job Costing
+
+	It seems like these are three very different but closely related things, and 
+	maybe it'd be better to treat them more distinctly that we have been so far.
+
+	Each of these seem to address significantly different purposes and seek to 
+	answer fairly different questsions. I think it might be better to handle them 
+	independently to start, then stitch them together afterward.
+	'''
+}
+
+table Accounts {
+	id integer [pk, not null]
+	code integer
+	name varchar
+	description varchar
+	notes longtext
+	account_type account_types [not null]
+}
+
+enum AccountTypes {
+	asset
+	liability
+	income
+	expense
+	equity
+}
+
+table Transactions {
+	id integer [pk, not null]
+	transaction_id_match integer [ref: - Transactions.id]
+	account_id integer [ref: - Accounts.id, not null]
+	transaction_categorizations_id integer [ref: < Accounts.id, not null]
+	posted date [not null]
+	name varchar [not null]
+	amount decimal [not null]
+	transaction_type TransactionTypes [not null]
+	is_virtual boolean [default: false ]
+	note: '''
+	This schema provides a way to capture both actual and expected transactions.
+	
+	The `is_virtual` boolean field is true for "expected transactions", and false for 
+	"actual transactions".
+
+	The `transaction_id_match` field can be null or populated.
+	If the `transaction_id_match` field is false, then it will always be null.
+	If the `transaction_id_match` field is true, then it will eventually become 
+	populated with a `transaction_id` which refers to the matching "actual" (not-
+	virtual) transaction.
+	'''
+}
+
+table TransactionCategorizations {
+	id integer [pk, not null]
+	account_id integer [ref: - Accounts.id, not null]
+	amount decimal [not null]
+}
+
+table TransactionsBank {
+	id integer [pk, not null]
+	account_id integer [ref: - Accounts.id, not null]
+	transaction_id integer [ref: - Transactions.id]
+	fitid integer [not null]
+	posted date [not null]
+	name varchar [not null]
+	memo varchar [not null]
+	amount decimal [not null]
+	trasnaction_type TransactionTypes [not null]
+}
+
+table StatementsBank {
+	id integer [pk, not null]
+	account_id integer [ref: - Accounts.id, not null]
+	account_type account_types [not null]
+	account integer [not null]
+	exported date [not null]
+	imported date [not null]
+	start date [not null]
+	end date [not null]
+}
+
+enum TransactionTypes {
+	credit
+	debit
+}
+
+table Jobtasks {
+	id integer [pk, not null]
+	parent_id integer [ref: - Jobtasks.id]
+	code integer [not null]
+	name varchar [not null]
+	description longtext
+}
+
+table JobtasksBranches {
+	id integer [pk, not null]
+	jobstasks_id integer [ref: - Jobtasks.id, not null]
+	children_ids varchar [note: 'This will be an array of `Jobtasks` ids.']
+}
+
+table JobtasksLeaves {
+	id integer [pk, not null]
+	jobstasks_id integer [ref: - Jobtasks.id, not null]
+	cost decimal
+	markup decimal
+	quantity decimal
+	tax decimal
+}
+
+note BudgetJob {
+	'''
+	This would be the aggregate cost of all leaves in the JobtasksLeaves table.
+	These kinds of Expectations are not dependent on time.
+	Alternatively, a start and end date could be required for a job and it could 
+	then use those as the "period".
+	'''
+}
+
+note ExpectedTransactionsJob {
+	'''
+	This could be implemented simply as just one transaction (ref: invoice) for 
+	the total cost of the job. Otherwise, it could be divided up into multiple 
+	transactions, one per each anticipated invoice.
+	'''
+}
+
+note BudgetAccount {
+	'''
+	This would be an arbitrary amount for a specified accounting period.
+	If we implemented some kind of accounting period, we could implement per-
+	account budgets. If the amount was known for the previous year, that number 
+	could be used as a guide.
+	'''
+}
+
+note ExpectedTransactionsAccount {
+	'''
+	This could have known periodic costs such as:
+	- software subscriptions
+	- license plate renewals
+	- annual or monthly insurance payments
+	- loan payments
+	- etc.
+	'''
+}
+
+note BudgetContract {
+	'''
+	This would be derived from the total amount expected over the course of the 
+	contract start and contract end dates.	
+	'''
+}
+
+note ExpectedTransactionsContract {
+	'''
+	This would be derived from the contract amount and frequency.
+	'''
+}
+
+note ExpectedTransactions {
+	'''
+	These could be entries in the `Transactions` table but with `posted` dates 
+	whose values are set to some time in the future.
+
+	However, this is something where we'd want to set the expectation and match 
+	that expectation with "actuals" once the relevant transactions hit the related 
+	bank account.
+
+	That being the case, we'd want to have two different kinds of transactions 
+	with an inheritance model, and be able to link a one-to-one relationship in 
+	the appropriate table. Would this also require some kind of split capability? 
+	Or is the current "categorizations" capability already sufficient?
+	'''
+}
+
+
+note resources {
+	'''
+	- https://dba.stackexchange.com/questions/102370/double-entry-bookkeeping-database-design
+	- https://i.stack.imgur.com/jt0u2.png
+	- https://blog.journalize.io/posts/an-elegant-db-schema-for-double-entry-accounting/
+	- https://waveapps.com/ (chart of accounts)
+	- https://stackoverflow.com/questions/59432964/relational-data-model-for-double-entry-accounting
+	- https://www.softwaregems.com.au/Documents/Student_Resolutions/Alex/Alex%20Account%20TA.pdf
+	- https://vertabelo.com/blog/inheritance-in-database/
+	'''
+}
+
+note OriginalRetoolEstimateTables {
+	'''
+tasks
+---------------------
+description
+estimated_cost
+estimated_quantity
+insurance_code
+is_parent_task
+markup
+name
+percentage_complete
+projects_idprojects
+subtasktask_idtask
+task_branch
+task_category
+task_description
+task_id
+task_name
+task_percentage_complete
+task_status
+tax
+url
+
+tasks_branches
+---------------------
+branch_cost_code
+idtasks_branches
+insurance_codes_idinsurance_codes
+task_task_id
+
+tasks_leaves
+---------------------
+idtasks_leaves
+item_cost
+item_markup
+item_quantity
+item_tax
+task_categories_idtask_categories
+task_cost_code
+task_stage
+task_stage_notes
+task_task_id
+	'''
+}
